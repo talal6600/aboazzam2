@@ -11,7 +11,12 @@ import {
 const API_URL = "https://script.google.com/macros/s/AKfycbygAwOcqosMpmUokaaZZVrgPRRt__AZO8jVqW4koRAg4VB7fwPvrgOGC8OPSf2UEyLPxQ/exec";
 const SYSTEM_KEY = 'stc_pro_v14_system';
 const AUTH_KEY = 'stc_pro_v14_auth_user';
-const LABELS: Record<string, string> = { jawwy: 'شريحة جوّي', sawa: 'شريحة سوا', multi: 'عميل متعددة', issue: 'لم يتم الاكمال' };
+const LABELS: Record<string, string> = { 
+  jawwy: 'شريحة جوّي', 
+  sawa: 'شريحة سوا', 
+  multi: 'عميل متعددة', 
+  issue: 'لم يتم الاكمال' 
+};
 
 const App = () => {
   const [system, setSystem] = useState<any>({
@@ -31,17 +36,20 @@ const App = () => {
 
   useEffect(() => {
     const local = localStorage.getItem(SYSTEM_KEY);
+    let currentSystem = system;
     if (local) {
         try { 
           const parsed = JSON.parse(local);
-          if (parsed && parsed.users) setSystem(parsed); 
+          if (parsed && parsed.users) {
+            setSystem(parsed);
+            currentSystem = parsed;
+          }
         } catch(e) { console.error("Local load error:", e); }
     }
     
     const auth = localStorage.getItem(AUTH_KEY);
     if (auth) {
-      const parsedSystem = local ? JSON.parse(local) : system;
-      const user = parsedSystem.users.find((u: any) => u.id === auth);
+      const user = currentSystem.users.find((u: any) => u.id === auth);
       if (user) setCurrentUser(user);
     }
     sync();
@@ -85,17 +93,19 @@ const App = () => {
   };
 
   const db = currentUser?.db;
+  
   const dayTx = useMemo(() => {
     if (!db?.tx) return [];
     return db.tx.filter((t: any) => new Date(t.date).toDateString() === curDate.toDateString());
   }, [db, curDate]);
   
-  const dayTotal = dayTx.reduce((s: number, t: any) => s + (t.amt || 0), 0);
+  const dayTotal = useMemo(() => dayTx.reduce((s: number, t: any) => s + (t.amt || 0), 0), [dayTx]);
 
   const targetMetrics = useMemo(() => {
     if (!db) return { percent: 0, sales: 0, target: 3000 };
     const d = new Date(curDate);
-    const sun = new Date(d.setDate(d.getDate() - d.getDay())); sun.setHours(0,0,0,0);
+    const sun = new Date(d.setDate(d.getDate() - d.getDay())); 
+    sun.setHours(0,0,0,0);
     const sales = db.tx.filter((t: any) => new Date(t.date) >= sun).reduce((s: number,t: any) => s + (t.amt || 0), 0);
     const target = db.settings?.weeklyTarget || 3000;
     return { sales, target, percent: Math.min(100, Math.round((sales/target)*100)) };
@@ -129,18 +139,26 @@ const App = () => {
             <div className="bg-white/20 p-2 rounded-xl"><User size={20}/></div>
             <div className="text-right">
               <span className="block text-[10px] opacity-60 font-bold">مرحباً بك</span>
-              <span className="block font-black text-sm leading-none">{currentUser.name || 'مستخدم'}</span>
+              <span className="block font-black text-sm leading-none">{String(currentUser.name || 'مستخدم')}</span>
             </div>
           </div>
           <button onClick={sync} className={`p-2 bg-white/10 rounded-xl ${isSyncing ? 'animate-spin' : ''}`}><RotateCcw size={20}/></button>
         </div>
         <div className="flex justify-center items-center gap-6 bg-black/10 p-3 rounded-2xl backdrop-blur-md">
-          <button onClick={() => setCurDate(d => new Date(d.setDate(d.getDate() - 1)))}><ChevronRight size={20}/></button>
+          <button onClick={() => setCurDate(d => {
+            const next = new Date(d);
+            next.setDate(next.getDate() - 1);
+            return next;
+          })}><ChevronRight size={20}/></button>
           <div className="text-center min-w-[120px]">
             <span className="block font-black text-xl">{curDate.toLocaleDateString('ar-SA', { day: 'numeric', month: 'short' })}</span>
             <span className="text-[10px] font-bold opacity-60 uppercase tracking-widest">{curDate.toLocaleDateString('ar-SA', { weekday: 'long' })}</span>
           </div>
-          <button onClick={() => setCurDate(d => new Date(d.setDate(d.getDate() + 1)))}><ChevronLeft size={20}/></button>
+          <button onClick={() => setCurDate(d => {
+            const next = new Date(d);
+            next.setDate(next.getDate() + 1);
+            return next;
+          })}><ChevronLeft size={20}/></button>
         </div>
       </header>
 
@@ -157,9 +175,9 @@ const App = () => {
               <div className="relative z-10">
                 <h3 className="text-xs font-black opacity-60 mb-3 tracking-widest uppercase">الهدف الأسبوعي</h3>
                 <div className="flex justify-between items-end mb-6">
-                  <span className="text-5xl font-black">{targetMetrics.sales} <small className="text-sm opacity-40">/ {targetMetrics.target}</small></span>
+                  <span className="text-5xl font-black">{String(targetMetrics.sales)} <small className="text-sm opacity-40">/ {String(targetMetrics.target)}</small></span>
                   <div className="text-center">
-                    <span className="text-2xl font-black block">{targetMetrics.percent}%</span>
+                    <span className="text-2xl font-black block">{String(targetMetrics.percent)}%</span>
                     <span className="text-[8px] opacity-60 font-bold">مكتمل</span>
                   </div>
                 </div>
@@ -170,9 +188,9 @@ const App = () => {
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <ActionBtn label="جوّي" icon={<Cpu className="text-orange-500" />} stock={db.stock?.jawwy} onClick={() => { setTempSim('jawwy'); setModalType('price'); }} />
-              <ActionBtn label="سوا" icon={<Smartphone className="text-stc-purple" />} stock={db.stock?.sawa} onClick={() => { setTempSim('sawa'); setModalType('price'); }} />
-              <ActionBtn label="متعددة" icon={<Layers className="text-amber-500" />} stock={db.stock?.multi} onClick={() => { setTempSim('multi'); setModalType('multi'); }} />
+              <ActionBtn label="جوّي" icon={<Cpu className="text-orange-500" />} stock={db?.stock?.jawwy} onClick={() => { setTempSim('jawwy'); setModalType('price'); }} />
+              <ActionBtn label="سوا" icon={<Smartphone className="text-stc-purple" />} stock={db?.stock?.sawa} onClick={() => { setTempSim('sawa'); setModalType('price'); }} />
+              <ActionBtn label="متعددة" icon={<Layers className="text-amber-500" />} stock={db?.stock?.multi} onClick={() => { setTempSim('multi'); setModalType('multi'); }} />
               <ActionBtn label="تعثر" icon={<AlertCircle className="text-zinc-400" />} onClick={() => { if(confirm('تسجيل طلب لم يكتمل؟')){ setTempSim('issue'); handleSale(10, 0); } }} />
             </div>
 
@@ -183,13 +201,17 @@ const App = () => {
                   <div className="flex items-center gap-4">
                     <div className="p-3 bg-zinc-50 rounded-2xl"><SimIcon type={t.type} size={20}/></div>
                     <div className="text-right">
-                      <span className="block font-black text-sm">{LABELS[t.type] || t.type}</span>
+                      <span className="block font-black text-sm">{String(LABELS[t.type] || t.type)}</span>
                       <span className="text-[10px] font-bold text-zinc-300">{new Date(t.date).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' })}</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-4">
                     <span className="text-lg font-black text-stc-purple">{String(t.amt)} ﷼</span>
-                    <button onClick={() => updateDb(d => ({ ...d, tx: d.tx.filter((x: any) => x.id !== t.id), stock: { ...d.stock, [t.type]: t.type !== 'issue' ? (d.stock[t.type] || 0) + (t.sims || 0) : 0 } }))} className="text-zinc-200 hover:text-red-500 transition-colors"><Trash2 size={18}/></button>
+                    <button onClick={() => updateDb(d => ({ 
+                      ...d, 
+                      tx: d.tx.filter((x: any) => x.id !== t.id), 
+                      stock: { ...d.stock, [t.type]: t.type !== 'issue' ? (d.stock[t.type] || 0) + (t.sims || 0) : 0 } 
+                    }))} className="text-zinc-200 hover:text-red-500 transition-colors"><Trash2 size={18}/></button>
                   </div>
                 </div>
               ))}
@@ -202,7 +224,7 @@ const App = () => {
         {activeView === 'fuel' && <FuelView db={db} updateDb={updateDb} />}
         {activeView === 'settings' && (
             <div className="space-y-6 text-right">
-                <h2 className="text-xl font-black text-stc-purple">الإعدادات</h2>
+                <h2 className="text-xl font-black text-stc-purple px-2">الإعدادات</h2>
                 <div className="bg-white p-6 rounded-3xl shadow-sm border border-zinc-100">
                     <button onClick={() => { localStorage.removeItem(AUTH_KEY); window.location.reload(); }} className="w-full flex items-center justify-between text-red-500 font-bold p-2">
                         <span>تسجيل الخروج</span>
@@ -264,7 +286,7 @@ const StatCard = ({ label, value, icon, color }: any) => {
     <div className="bg-white p-5 rounded-3xl shadow-sm border border-zinc-50 flex items-center justify-between">
       <div className={`p-3 rounded-2xl ${colorMap[color] || 'bg-zinc-50 text-zinc-600'}`}>{icon}</div>
       <div className="text-left">
-        <span className="text-[10px] font-black text-zinc-300 block uppercase mb-1">{label}</span>
+        <span className="text-[10px] font-black text-zinc-300 block uppercase mb-1">{String(label)}</span>
         <span className="text-xl font-black leading-none tracking-tighter text-zinc-800">{String(value)}</span>
       </div>
     </div>
@@ -279,7 +301,7 @@ const ActionBtn = ({ label, icon, stock, onClick }: { label: string; icon: React
         </span>
     )}
     <div className="flex justify-center mb-3 group-hover:scale-110 transition-transform">{icon}</div>
-    <span className="font-black text-xs text-zinc-700 tracking-tight">{label}</span>
+    <span className="font-black text-xs text-zinc-700 tracking-tight">{String(label)}</span>
   </button>
 );
 
@@ -301,7 +323,7 @@ const InventoryView = ({ db, updateDb }: any) => (
       {Object.entries(db?.stock || {}).map(([k, v]) => (
         <div key={k} className="bg-white p-6 rounded-3xl text-center shadow-sm border border-zinc-50">
           <span className="block text-3xl font-black text-stc-purple mb-1 tracking-tighter">{String(v)}</span>
-          <span className="text-[10px] font-bold text-zinc-300 uppercase tracking-widest">{LABELS[k] || k}</span>
+          <span className="text-[10px] font-bold text-zinc-300 uppercase tracking-widest">{String(LABELS[k] || k)}</span>
         </div>
       ))}
     </div>
@@ -311,7 +333,7 @@ const InventoryView = ({ db, updateDb }: any) => (
         {Object.entries(db?.damaged || {}).map(([k, v]) => (
           <div key={k}>
             <span className="block font-black text-rose-600 text-lg">{String(v)}</span>
-            <span className="text-[9px] font-bold text-rose-300 uppercase">{LABELS[k] || k}</span>
+            <span className="text-[9px] font-bold text-rose-300 uppercase">{String(LABELS[k] || k)}</span>
           </div>
         ))}
       </div>
@@ -320,7 +342,10 @@ const InventoryView = ({ db, updateDb }: any) => (
         <button onClick={() => {
             const type = prompt('النوع؟ (jawwy, sawa, multi)');
             const qty = prompt('الكمية؟');
-            if(type && qty) updateDb((d: any) => ({ ...d, stock: { ...d.stock, [type]: (d.stock[type] || 0) + parseInt(qty) } }));
+            if(type && qty) updateDb((d: any) => ({ 
+              ...d, 
+              stock: { ...d.stock, [type]: (d.stock[type] || 0) + parseInt(qty || '0') } 
+            }));
         }} className="w-full bg-emerald-50 text-emerald-600 p-6 rounded-2xl font-black flex justify-between items-center shadow-sm border border-emerald-100">
             <span>إضافة مخزون يدوي</span>
             <Plus size={20}/>

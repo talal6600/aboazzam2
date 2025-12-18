@@ -88,13 +88,11 @@
     <div id="root"></div>
     
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script type="text/babel" data-type="module">
-        import './index.tsx';
-    </script>
+    <script type="text/babel" data-type="module" src="./index.tsx"></script>
 
     <script>
       window.onerror = function(msg) {
-        console.error(msg);
+        console.error("Global Error:", msg);
         if (msg.includes('Script error')) return;
         const loader = document.getElementById('fallback-loader');
         if (loader) loader.style.display = 'none';
@@ -112,7 +110,7 @@
             loader.style.opacity = '0';
             setTimeout(() => loader.style.display = 'none', 500);
           }
-        }, 3000);
+        }, 2000);
       });
     </script>
 </body>
