@@ -56,7 +56,6 @@
         overscroll-behavior-y: contain;
         overflow-x: hidden;
       }
-      /* منع تقطع الخطوط العربية في الحواف */
       span, div, p, h1, h2, h3, h4, input, select, button {
         padding-top: 0.1em;
         padding-bottom: 0.1em;
@@ -85,10 +84,13 @@
       }
     }
     </script>
-<link rel="stylesheet" href="/index.css">
 </head>
 <body class="bg-[#F8F9FE] dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 transition-colors duration-300">
     <div id="root"></div>
+    
+    <!-- هذا السطر هو المحرك الرئيسي الذي كان مفقوداً -->
+    <script type="module" src="./index.tsx"></script>
+
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
@@ -98,6 +100,5 @@
         });
       }
     </script>
-<script type="module" src="/index.tsx"></script>
 </body>
 </html>
