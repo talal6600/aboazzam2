@@ -1,388 +1,339 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
-import { UserData, View, SimType, Transaction, FuelLog, SystemState, UserRole } from './types.ts';
-import { LABELS, API_URL, ICONS, FUEL_PRICES } from './constants.tsx';
 import { 
-  Target, Trash2, Calendar, Droplets, TrendingUp, 
-  ArrowLeftRight, Activity, Moon, Sun, Printer, 
-  Wallet, Download, CloudUpload, Eye, EyeOff, 
-  Fuel, History, Cpu, Layers, AlertCircle, Smartphone,
-  Lock, Users, LogOut, ShieldCheck, UserPlus, Key, User as UserIcon,
-  Plus, RotateCcw, AlertTriangle, ChevronLeft, ChevronRight, BarChart3,
-  Home, Settings, Clock, Gauge, Trash, Info, Zap, PieChart as PieChartIcon,
-  Save, CheckCircle, Smartphone as Phone, Fuel as GasIcon,
-  LayoutDashboard, Box, Filter
+  Home, Wallet, Fuel, BarChart3, Settings, 
+  Cpu, Smartphone, Layers, AlertCircle, 
+  ChevronLeft, ChevronRight, LogOut, RotateCcw,
+  Target, TrendingUp, CheckCircle, Trash2, Plus, ArrowLeftRight, HeartOff, User
 } from 'lucide-react';
 import { 
-  BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Cell, Tooltip, CartesianGrid,
-  PieChart, Pie, Legend, Cell as PieCell
+  BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Cell, Tooltip
 } from 'recharts';
 
+// --- الثوابت ---
+const API_URL = "https://script.google.com/macros/s/AKfycbygAwOcqosMpmUokaaZZVrgPRRt__AZO8jVqW4koRAg4VB7fwPvrgOGC8OPSf2UEyLPxQ/exec";
 const SYSTEM_KEY = 'stc_pro_v14_system';
 const AUTH_KEY = 'stc_pro_v14_auth_user';
+const LABELS = { jawwy: 'شريحة جوّي', sawa: 'شريحة سوا', multi: 'عميل متعددة', issue: 'لم يتم الاكمال' };
+const FUEL_PRICES = { '91': 2.18, '95': 2.33, 'diesel': 1.15 };
 
-// مكون الأيقونات المطور
-const SimIcon = ({ type, size = 24 }: { type: SimType | 'all', size?: number }) => {
-  if (type === 'jawwy') return <Cpu size={size} className="text-orange-500" />;
-  if (type === 'sawa') return <Smartphone size={size} className="text-stc-purple dark:text-purple-400" />;
-  if (type === 'multi') return <Layers size={size} className="text-amber-500" />;
-  if (type === 'issue') return <AlertCircle size={size} className="text-zinc-500" />;
-  return <Box size={size} />;
-};
-
-const App: React.FC = () => {
-  // --- States ---
-  const [system, setSystem] = useState<SystemState>({
-    users: [
-      { 
-        id: 'talal-admin', 
-        username: 'talal', 
-        password: '00966', 
-        role: 'admin', 
-        name: 'طلال المندوب',
-        db: { tx: [], stock: { jawwy: 0, sawa: 0, multi: 0 }, damaged: { jawwy: 0, sawa: 0, multi: 0 }, stockLog: [], fuelLog: [], settings: { weeklyTarget: 3000, showWeeklyTarget: true, preferredFuel: '91' } }
-      }
-    ],
+const App = () => {
+  // --- الحالات (States) ---
+  const [system, setSystem] = useState({
+    users: [{ 
+      id: 'talal-admin', username: 'talal', password: '00966', role: 'admin', name: 'طلال المندوب',
+      db: { tx: [], stock: { jawwy: 0, sawa: 0, multi: 0 }, damaged: { jawwy: 0, sawa: 0, multi: 0 }, stockLog: [], fuelLog: [], settings: { weeklyTarget: 3000 } }
+    }],
     globalTheme: 'light'
   });
 
-  const [currentUser, setCurrentUser] = useState<UserData | null>(null);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [activeView, setActiveView] = useState('home');
   const [isSyncing, setIsSyncing] = useState(false);
-  const [activeView, setActiveView] = useState<View>('home');
   const [curDate, setCurDate] = useState(new Date());
-  const [modalType, setModalType] = useState<string | null>(null);
-  const [loginError, setLoginError] = useState('');
-  const [tempSim, setTempSim] = useState<SimType | null>(null);
-  const [tempQty, setTempQty] = useState(1);
-  const [stockMode, setStockMode] = useState<'add' | 'return' | 'to_damaged' | 'manage_damaged'>('add');
+  const [modalType, setModalType] = useState(null);
+  const [tempSim, setTempSim] = useState(null);
+  const [loginForm, setLoginForm] = useState({ user: '', pass: '' });
 
-  const [repMonth, setRepMonth] = useState(new Date().getMonth());
-  const [repYear, setRepYear] = useState(new Date().getFullYear());
-  const [repWeekIndex, setRepWeekIndex] = useState(0);
-
-  const [loginForm, setLoginForm] = useState({ user: '', pass: '', remember: true });
-
-  // --- Core Logic ---
+  // --- التحميل والمزامنة ---
   useEffect(() => {
-    const localSystem = localStorage.getItem(SYSTEM_KEY);
-    const localAuth = localStorage.getItem(AUTH_KEY);
+    const local = localStorage.getItem(SYSTEM_KEY);
+    if (local) setSystem(JSON.parse(local));
     
-    if (localSystem) {
-      const parsed = JSON.parse(localSystem);
-      setSystem(parsed);
-      if (parsed.globalTheme === 'dark') document.documentElement.classList.add('dark');
+    const auth = localStorage.getItem(AUTH_KEY);
+    if (auth) {
+      const user = JSON.parse(local || '{"users":[]}').users.find(u => u.id === auth);
+      if (user) setCurrentUser(user);
     }
-
-    if (localAuth) {
-      const user = (JSON.parse(localSystem || '{}').users || system.users).find((u: any) => u.id === localAuth);
-      if (user) {
-        setCurrentUser(user);
-        setActiveView('home');
-      }
-    }
-    syncWithCloud();
+    sync();
   }, []);
 
-  const saveSystem = (updatedSystem: SystemState) => {
-    localStorage.setItem(SYSTEM_KEY, JSON.stringify(updatedSystem));
-    setSystem(updatedSystem);
-    triggerCloudSave(updatedSystem);
-  };
-
-  const syncWithCloud = async () => {
+  const sync = async () => {
     setIsSyncing(true);
     try {
-      const response = await fetch(API_URL);
-      const cloudData = await response.json();
-      if (cloudData && cloudData.users) {
-        setSystem(cloudData);
-        localStorage.setItem(SYSTEM_KEY, JSON.stringify(cloudData));
-        const localAuth = localStorage.getItem(AUTH_KEY);
-        if (localAuth) {
-          const user = cloudData.users.find((u: any) => u.id === localAuth);
-          if (user) setCurrentUser(user);
-        }
+      const res = await fetch(API_URL);
+      const data = await res.json();
+      if (data?.users) {
+        setSystem(data);
+        localStorage.setItem(SYSTEM_KEY, JSON.stringify(data));
+        const auth = localStorage.getItem(AUTH_KEY);
+        if (auth) setCurrentUser(data.users.find(u => u.id === auth));
       }
     } catch (e) { console.warn("Offline Mode"); }
     finally { setIsSyncing(false); }
   };
 
-  const triggerCloudSave = async (data: SystemState) => {
-    try {
-      await fetch(API_URL, {
-        method: "POST",
-        mode: "no-cors",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data)
-      });
-    } catch (e) { console.error("Cloud sync failed"); }
-  };
-
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    const user = system.users.find(u => u.username === loginForm.user && u.password === loginForm.pass);
-    if (user) {
-      setCurrentUser(user);
-      if (loginForm.remember) localStorage.setItem(AUTH_KEY, user.id);
-      setLoginError('');
-      setActiveView('home');
-    } else {
-      setLoginError('بيانات الدخول غير صحيحة');
-    }
-  };
-
-  const updateCurrentUserDb = (updater: (oldDb: UserData['db']) => UserData['db']) => {
+  const updateDb = (updater) => {
     if (!currentUser) return;
-    const nextUsers = system.users.map(u => u.id === currentUser.id ? { ...u, db: updater(u.db) } : u);
-    saveSystem({ ...system, users: nextUsers });
-    setCurrentUser(prev => prev ? { ...prev, db: updater(prev.db) } : null);
+    const nextDb = updater(currentUser.db);
+    const nextUsers = system.users.map(u => u.id === currentUser.id ? { ...u, db: nextDb } : u);
+    const nextSystem = { ...system, users: nextUsers };
+    setSystem(nextSystem);
+    setCurrentUser({ ...currentUser, db: nextDb });
+    localStorage.setItem(SYSTEM_KEY, JSON.stringify(nextSystem));
+    fetch(API_URL, { method: "POST", mode: "no-cors", body: JSON.stringify(nextSystem) });
   };
 
-  const confirmSale = (amt: number, sims: number) => {
-    if (!tempSim || !currentUser) return;
-    updateCurrentUserDb(oldDb => {
-      const newStock = { ...oldDb.stock };
-      if (tempSim !== 'issue') newStock[tempSim] -= sims;
-      return {
-        ...oldDb,
-        tx: [{ id: Date.now(), date: curDate.toISOString(), type: tempSim, amt, sims }, ...oldDb.tx],
-        stock: newStock
-      };
-    });
+  // --- العمليات ---
+  const handleSale = (amt, sims) => {
+    updateDb(db => ({
+      ...db,
+      tx: [{ id: Date.now(), date: curDate.toISOString(), type: tempSim, amt, sims }, ...db.tx],
+      stock: { ...db.stock, [tempSim]: tempSim !== 'issue' ? db.stock[tempSim] - sims : 0 }
+    }));
     setModalType(null);
   };
 
-  // Fix: Added deleteTx function to handle transaction removal and stock restoration
-  const deleteTx = (id: number) => {
-    if (!confirm('هل أنت متأكد من حذف هذه العملية؟')) return;
-    updateCurrentUserDb(oldDb => {
-      const txToDelete = oldDb.tx.find(t => t.id === id);
-      if (!txToDelete) return oldDb;
-
-      const newStock = { ...oldDb.stock };
-      if (txToDelete.type !== 'issue') {
-        newStock[txToDelete.type as Exclude<SimType, 'issue'>] += txToDelete.sims;
-      }
-
-      return {
-        ...oldDb,
-        tx: oldDb.tx.filter(t => t.id !== id),
-        stock: newStock
-      };
-    });
-  };
-
   const db = currentUser?.db;
-  const dayTx = useMemo(() => db?.tx.filter(t => new Date(t.date).toDateString() === curDate.toDateString()) || [], [db?.tx, curDate]);
-  const dayTotal = useMemo(() => dayTx.reduce((sum, t) => sum + t.amt, 0), [dayTx]);
+  const dayTx = useMemo(() => db?.tx.filter(t => new Date(t.date).toDateString() === curDate.toDateString()) || [], [db, curDate]);
+  const dayTotal = dayTx.reduce((s, t) => s + t.amt, 0);
 
   const targetMetrics = useMemo(() => {
-    if (!db) return { percent: 0, weekSales: 0, remain: 0, target: 3000 };
+    if (!db) return { percent: 0, sales: 0, target: 3000 };
     const d = new Date(curDate);
-    const sun = new Date(d.setDate(d.getDate() - d.getDay()));
-    sun.setHours(0,0,0,0);
+    const sun = new Date(d.setDate(d.getDate() - d.getDay())); sun.setHours(0,0,0,0);
     const sales = db.tx.filter(t => new Date(t.date) >= sun).reduce((s,t) => s + t.amt, 0);
     const target = db.settings.weeklyTarget || 3000;
-    return { 
-      weekSales: sales, 
-      target, 
-      percent: Math.min(100, Math.round((sales/target)*100)),
-      remain: Math.max(0, target - sales)
-    };
-  }, [db?.tx, db?.settings.weeklyTarget, curDate]);
+    return { sales, target, percent: Math.min(100, Math.round((sales/target)*100)) };
+  }, [db, curDate]);
 
-  // --- Views ---
-  const HomeView = () => (
-    <div className="px-5 pt-6 space-y-6 pb-40 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      {/* ملخص سريع علوي */}
-      <div className="grid grid-cols-2 gap-4">
-        <div className="bg-white dark:bg-zinc-900 p-5 rounded-[2rem] shadow-sm border border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
-            <div className="bg-stc-purple/10 p-3 rounded-2xl text-stc-purple dark:text-purple-400"><LayoutDashboard size={20}/></div>
-            <div className="text-left">
-                <span className="text-[10px] font-black text-zinc-400 block uppercase">مبيعات اليوم</span>
-                <span className="text-xl font-black text-stc-purple dark:text-purple-400 leading-none">{dayTotal} <small className="text-[10px]">﷼</small></span>
-            </div>
+  // --- واجهة الدخول ---
+  if (!currentUser) return (
+    <div className="min-h-screen bg-[#F8F9FE] flex items-center justify-center p-6">
+      <div className="w-full max-w-sm bg-white rounded-[3rem] p-10 shadow-2xl text-center">
+        <div className="bg-stc-purple p-6 rounded-3xl w-24 h-24 flex items-center justify-center mx-auto mb-8 shadow-xl">
+          <img src="https://www.stc.com.sa/content/dam/stc/footer-icons/stc-badge-purple.svg" className="brightness-0 invert" alt="STC" />
         </div>
-        <div className="bg-white dark:bg-zinc-900 p-5 rounded-[2rem] shadow-sm border border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
-            <div className="bg-emerald-100 p-3 rounded-2xl text-emerald-600"><CheckCircle size={20}/></div>
-            <div className="text-left">
-                <span className="text-[10px] font-black text-zinc-400 block uppercase">إجمالي الطلبات</span>
-                <span className="text-xl font-black text-emerald-600 leading-none">{dayTx.length}</span>
-            </div>
-        </div>
-      </div>
-
-      {/* بطاقة الهدف الأسبوعي المطورة */}
-      <div className="bg-gradient-to-br from-[#4F008C] to-[#2d0050] p-8 rounded-[3rem] text-white shadow-2xl relative overflow-hidden group">
-        <div className="absolute -top-10 -right-10 opacity-10 group-hover:scale-125 transition-transform duration-1000"><Target size={200}/></div>
-        <div className="relative z-10 flex flex-col h-full">
-            <div className="flex justify-between items-start mb-6">
-                <div>
-                    <h2 className="text-sm font-black opacity-60 uppercase tracking-widest mb-1">الهدف الأسبوعي</h2>
-                    <div className="flex items-baseline gap-2">
-                        <span className="text-5xl font-black tracking-tighter leading-none">{targetMetrics.weekSales}</span>
-                        <span className="text-lg opacity-40">/ {targetMetrics.target} ﷼</span>
-                    </div>
-                </div>
-                <div className="bg-white/10 backdrop-blur-xl p-4 rounded-3xl text-center min-w-[70px]">
-                    <span className="text-2xl font-black leading-none block mb-1">{targetMetrics.percent}%</span>
-                    <span className="text-[8px] font-black opacity-50 uppercase">الإنجاز</span>
-                </div>
-            </div>
-            <div className="h-3 bg-black/20 rounded-full mb-4 overflow-hidden">
-                <div className="h-full bg-gradient-to-r from-emerald-400 to-cyan-400 shadow-[0_0_15px_rgba(52,211,153,0.5)] transition-all duration-1000" style={{ width: `${targetMetrics.percent}%` }} />
-            </div>
-            <div className="flex justify-between items-center text-[10px] font-black opacity-70">
-                <span>متبقي لتحقيق الهدف: {targetMetrics.remain} ﷼</span>
-                <span className="flex items-center gap-1"><TrendingUp size={12}/> {targetMetrics.percent > 50 ? 'أداء ممتاز' : 'استمر بالعمل'}</span>
-            </div>
-        </div>
-      </div>
-
-      {/* أزرار الخدمات السريعة */}
-      <div className="grid grid-cols-2 gap-4">
-        <QuickAction label="شريحة جوّي" icon={<SimIcon type="jawwy" size={32}/>} stock={db?.stock.jawwy} onClick={() => { setTempSim('jawwy'); setModalType('price'); }} />
-        <QuickAction label="شريحة سوا" icon={<SimIcon type="sawa" size={32}/>} stock={db?.stock.sawa} onClick={() => { setTempSim('sawa'); setModalType('price'); }} />
-        <QuickAction label="عميل متعددة" icon={<SimIcon type="multi" size={32}/>} onClick={() => setModalType('multi')} stock={db?.stock.multi} />
-        <QuickAction label="تعثر طلب" icon={<SimIcon type="issue" size={32}/>} onClick={() => { if(confirm('تسجيل تعثر؟')){setTempSim('issue'); confirmSale(10, 0);} }} />
-      </div>
-
-      {/* التايم لاين */}
-      <div className="space-y-4">
-        <div className="flex justify-between items-center px-2">
-            <h3 className="text-xs font-black text-zinc-400 uppercase tracking-widest">سجل عمليات اليوم</h3>
-            <span className="bg-zinc-100 dark:bg-zinc-800 px-3 py-1 rounded-full text-[10px] font-black text-zinc-500">{dayTx.length} عمليات</span>
-        </div>
-        <div className="space-y-3">
-          {dayTx.map(t => (
-            <div key={t.id} className="bg-white dark:bg-zinc-900 p-5 rounded-[2rem] border border-zinc-100 dark:border-zinc-800 shadow-sm flex justify-between items-center tap-bounce group">
-                <div className="flex items-center gap-4 text-right">
-                    <div className="bg-zinc-50 dark:bg-zinc-800 p-3 rounded-2xl group-hover:bg-stc-purple/5 transition-colors"><SimIcon type={t.type} size={20}/></div>
-                    <div>
-                        <span className="block font-black text-sm dark:text-zinc-200">{LABELS[t.type]} {t.sims > 0 && `(${t.sims})`}</span>
-                        <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-tighter">{new Date(t.date).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' })}</span>
-                    </div>
-                </div>
-                <div className="flex items-center gap-4">
-                    <span className="text-lg font-black text-stc-purple dark:text-purple-400 tracking-tighter">{t.amt} ﷼</span>
-                    <button onClick={() => deleteTx(t.id)} className="text-zinc-200 hover:text-rose-500 transition-colors p-2"><Trash2 size={16}/></button>
-                </div>
-            </div>
-          ))}
-          {dayTx.length === 0 && <div className="p-12 text-center text-zinc-300 font-bold italic border-2 border-dashed border-zinc-100 dark:border-zinc-800 rounded-[2.5rem]">لا يوجد سجلات لليوم</div>}
+        <h1 className="text-2xl font-black text-stc-purple mb-8 uppercase tracking-tighter">مستر مندوب Pro</h1>
+        <div className="space-y-4">
+          <input type="text" placeholder="اسم المستخدم" className="w-full bg-zinc-50 p-5 rounded-2xl text-center font-bold outline-none" onChange={e=>setLoginForm({...loginForm, user:e.target.value})} />
+          <input type="password" placeholder="كلمة المرور" className="w-full bg-zinc-50 p-5 rounded-2xl text-center font-bold outline-none" onChange={e=>setLoginForm({...loginForm, pass:e.target.value})} />
+          <button onClick={() => {
+            const u = system.users.find(x => x.username === loginForm.user && x.password === loginForm.pass);
+            if (u) { setCurrentUser(u); localStorage.setItem(AUTH_KEY, u.id); }
+            else alert('خطأ في البيانات');
+          }} className="w-full bg-stc-purple text-white py-5 rounded-2xl font-black shadow-lg shadow-stc-purple/20">دخول آمن</button>
         </div>
       </div>
     </div>
   );
 
-  if (!currentUser) {
-    return (
-      <div className="min-h-screen bg-[#F8F9FE] flex items-center justify-center p-6 text-center animate-in fade-in duration-700">
-        <div className="w-full max-w-sm bg-white rounded-[4rem] p-10 shadow-2xl border border-zinc-100">
-          <div className="bg-stc-purple p-6 rounded-[2.5rem] w-20 h-20 flex items-center justify-center mx-auto mb-6 shadow-xl shadow-stc-purple/20">
-            <img src="https://www.stc.com.sa/content/dam/stc/footer-icons/stc-badge-purple.svg" className="brightness-0 invert w-10" alt="STC" />
-          </div>
-          <h1 className="text-2xl font-black text-stc-purple mb-2 tracking-tight">مستر مندوب Pro</h1>
-          <p className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.3em] mb-10">Premium Business Edition</p>
-          
-          <form onSubmit={handleLogin} className="space-y-4">
-            <input type="text" placeholder="اسم المستخدم" value={loginForm.user} onChange={e=>setLoginForm({...loginForm, user:e.target.value})} className="w-full bg-zinc-50 p-6 rounded-2xl outline-none font-bold text-center border-2 border-transparent focus:border-stc-purple/10 transition-all shadow-inner" />
-            <input type="password" placeholder="••••" value={loginForm.pass} onChange={e=>setLoginForm({...loginForm, pass:e.target.value})} className="w-full bg-zinc-50 p-6 rounded-2xl outline-none font-bold text-center border-2 border-transparent focus:border-stc-purple/10 transition-all shadow-inner" />
-            {loginError && <p className="text-rose-500 text-[10px] font-black animate-bounce">{loginError}</p>}
-            <button className="w-full bg-stc-purple text-white py-6 rounded-2xl font-black shadow-xl shadow-stc-purple/20 tap-bounce">دخول آمن</button>
-          </form>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className={`min-h-screen ${system.globalTheme === 'dark' ? 'dark' : ''} bg-[#F8F9FE] dark:bg-zinc-950 font-tajawal transition-colors duration-500`}>
-      <header className="bg-gradient-to-br from-stc-purple to-stc-dark pt-12 pb-8 px-6 rounded-b-[4rem] shadow-2xl sticky top-0 z-50 text-white transition-all overflow-hidden">
-        <div className="absolute top-0 right-0 w-40 h-40 bg-white/5 rounded-full -translate-y-20 translate-x-10" />
-        <div className="flex justify-between items-center mb-8 relative z-10">
+    <div className="min-h-screen bg-[#F8F9FE] pb-32">
+      {/* Header */}
+      <header className="bg-gradient-to-br from-stc-purple to-stc-dark pt-12 pb-10 px-6 rounded-b-[3.5rem] shadow-2xl sticky top-0 z-50 text-white">
+        <div className="flex justify-between items-center mb-8">
           <div className="flex items-center gap-3">
-             <div className="bg-white/20 backdrop-blur-md p-2 rounded-2xl border border-white/20"><UserIcon size={20}/></div>
-             <div className="text-right">
-                <span className="block text-xs font-black leading-tight opacity-60">أهلاً بك</span>
-                <span className="block text-md font-black tracking-tight">{currentUser.name}</span>
-             </div>
+            {/* Fix: Replaced non-existent UserIcon with User */}
+            <div className="bg-white/20 p-2 rounded-xl"><User size={20}/></div>
+            <div className="text-right">
+              <span className="block text-[10px] opacity-60">مرحباً بك</span>
+              <span className="block font-black text-sm leading-none">{currentUser.name}</span>
+            </div>
           </div>
-          <div className="flex gap-2">
-            <button onClick={syncWithCloud} className={`p-3 glass rounded-2xl ${isSyncing ? 'animate-spin' : ''}`}><RotateCcw size={18}/></button>
-            <button onClick={() => {
-              if(confirm('تسجيل خروج؟')){
-                setCurrentUser(null);
-                localStorage.removeItem(AUTH_KEY);
-              }
-            }} className="p-3 bg-rose-500/20 text-rose-200 border border-rose-500/20 rounded-2xl"><LogOut size={18}/></button>
-          </div>
+          <button onClick={sync} className={`p-2 bg-white/10 rounded-xl ${isSyncing ? 'animate-spin' : ''}`}><RotateCcw size={20}/></button>
         </div>
-        <div className="flex justify-center items-center gap-4 relative z-10 bg-black/10 p-2 rounded-[2rem] border border-white/5 backdrop-blur-sm mx-auto w-fit">
-          <button onClick={() => setCurDate(d => new Date(d.setDate(d.getDate() - 1)))} className="p-2 hover:bg-white/10 rounded-full transition-all"><ChevronRight size={24}/></button>
-          <div className="px-4 text-center min-w-[140px]">
-            <span className="text-lg font-black tracking-tight">{curDate.toLocaleDateString('ar-SA', { day: 'numeric', month: 'short' })}</span>
-            <span className="block text-[10px] font-black opacity-50 uppercase tracking-widest leading-none">{curDate.toLocaleDateString('ar-SA', { weekday: 'long' })}</span>
+        <div className="flex justify-center items-center gap-6 bg-black/10 p-3 rounded-2xl backdrop-blur-md">
+          <button onClick={() => setCurDate(d => new Date(d.setDate(d.getDate() - 1)))}><ChevronRight/></button>
+          <div className="text-center min-w-[120px]">
+            <span className="block font-black text-xl">{curDate.toLocaleDateString('ar-SA', { day: 'numeric', month: 'short' })}</span>
+            <span className="text-[10px] font-bold opacity-60 uppercase tracking-widest">{curDate.toLocaleDateString('ar-SA', { weekday: 'long' })}</span>
           </div>
-          <button onClick={() => setCurDate(d => new Date(d.setDate(d.getDate() + 1)))} className="p-2 hover:bg-white/10 rounded-full transition-all"><ChevronLeft size={24}/></button>
+          <button onClick={() => setCurDate(d => new Date(d.setDate(d.getDate() + 1)))}><ChevronLeft/></button>
         </div>
       </header>
 
-      <main className="max-w-md mx-auto">
-        {activeView === 'home' && <HomeView />}
-        {activeView === 'inv' && <div className="p-5 pb-40 text-center text-zinc-400 font-bold">يتم تحميل المخزون...</div>}
-        {activeView === 'fuel' && <div className="p-5 pb-40 text-center text-zinc-400 font-bold">يتم تحميل بيانات الوقود...</div>}
-        {activeView === 'rep' && <div className="p-5 pb-40 text-center text-zinc-400 font-bold">يتم تحضير التقارير...</div>}
-        {activeView === 'settings' && <div className="p-5 pb-40 text-center text-zinc-400 font-bold">فتح الإعدادات...</div>}
+      {/* Main Content */}
+      <main className="p-6 space-y-8 max-w-lg mx-auto">
+        {activeView === 'home' && (
+          <>
+            <div className="grid grid-cols-2 gap-4">
+              <StatCard label="مبيعات اليوم" value={`${dayTotal} ﷼`} icon={<TrendingUp size={18}/>} color="stc-purple" />
+              <StatCard label="إجمالي الطلبات" value={String(dayTx.length)} icon={<CheckCircle size={18}/>} color="emerald-600" />
+            </div>
+
+            <div className="bg-stc-purple p-8 rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden group">
+              <div className="absolute -top-10 -right-10 opacity-10"><Target size={150}/></div>
+              <div className="relative z-10">
+                <h3 className="text-xs font-black opacity-60 mb-3 tracking-widest">الهدف الأسبوعي</h3>
+                <div className="flex justify-between items-end mb-6">
+                  <span className="text-5xl font-black">{targetMetrics.sales} <small className="text-sm opacity-40">/ {targetMetrics.target}</small></span>
+                  <div className="text-center">
+                    <span className="text-2xl font-black block">{targetMetrics.percent}%</span>
+                    <span className="text-[8px] opacity-60">إنجاز</span>
+                  </div>
+                </div>
+                <div className="h-3 bg-black/20 rounded-full overflow-hidden">
+                  <div className="h-full bg-emerald-400 transition-all duration-1000" style={{ width: `${targetMetrics.percent}%` }} />
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <ActionBtn label="جوّي" icon={<Cpu className="text-orange-500" />} stock={db.stock.jawwy} onClick={() => { setTempSim('jawwy'); setModalType('price'); }} />
+              <ActionBtn label="سوا" icon={<Smartphone className="text-stc-purple" />} stock={db.stock.sawa} onClick={() => { setTempSim('sawa'); setModalType('price'); }} />
+              <ActionBtn label="متعددة" icon={<Layers className="text-amber-500" />} stock={db.stock.multi} onClick={() => setModalType('multi')} />
+              {/* Fix: Added explicit stock prop to fulfill component signature */}
+              <ActionBtn label="تعثر" stock={undefined} icon={<AlertCircle className="text-zinc-400" />} onClick={() => { if(confirm('تسجيل تعثر؟')){ setTempSim('issue'); handleSale(10, 0); } }} />
+            </div>
+
+            <div className="space-y-4">
+              <h4 className="text-xs font-black text-zinc-400 px-2 tracking-widest uppercase">سجل اليوم</h4>
+              {dayTx.map(t => (
+                <div key={t.id} className="bg-white p-5 rounded-3xl flex justify-between items-center shadow-sm border border-zinc-50">
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 bg-zinc-50 rounded-2xl"><SimIcon type={t.type} size={20}/></div>
+                    <div>
+                      <span className="block font-black text-sm">{LABELS[t.type]}</span>
+                      <span className="text-[10px] font-bold text-zinc-400">{new Date(t.date).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <span className="text-lg font-black text-stc-purple">{t.amt} ﷼</span>
+                    <button onClick={() => updateDb(d => ({ ...d, tx: d.tx.filter(x => x.id !== t.id), stock: { ...d.stock, [t.type]: t.type !== 'issue' ? d.stock[t.type] + t.sims : 0 } }))} className="text-zinc-200 hover:text-red-500 transition-colors"><Trash2 size={18}/></button>
+                  </div>
+                </div>
+              ))}
+              {dayTx.length === 0 && <div className="p-12 text-center text-zinc-300 font-bold border-2 border-dashed border-zinc-100 rounded-[2rem]">لا يوجد عمليات اليوم</div>}
+            </div>
+          </>
+        )}
+
+        {/* المكونات الأخرى (المخزون، الوقود، الخ) يمكن إضافتها هنا بنفس النمط */}
+        {activeView === 'inv' && <InventoryView db={db} updateDb={updateDb} />}
+        {activeView === 'fuel' && <FuelView db={db} updateDb={updateDb} />}
       </main>
 
-      <nav className="fixed bottom-0 left-0 right-0 z-[100] bg-white/80 dark:bg-zinc-900/80 backdrop-blur-2xl border-t border-zinc-100 dark:border-zinc-800 p-5 pb-8 shadow-[0_-10px_40px_rgba(0,0,0,0.05)]">
-        <div className="max-w-md mx-auto grid grid-cols-5 gap-1">
-          <NavItem icon={<Home size={22}/>} active={activeView === 'home'} onClick={() => setActiveView('home')} />
-          <NavItem icon={<Wallet size={22}/>} active={activeView === 'inv'} onClick={() => setActiveView('inv')} />
-          <NavItem icon={<Fuel size={22}/>} active={activeView === 'fuel'} onClick={() => setActiveView('fuel')} />
-          <NavItem icon={<BarChart3 size={22}/>} active={activeView === 'rep'} onClick={() => setActiveView('rep')} />
-          <NavItem icon={<Settings size={22}/>} active={activeView === 'settings'} onClick={() => setActiveView('settings')} />
-        </div>
+      {/* Navigation Bar */}
+      <nav className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-xl p-5 pb-10 border-t border-zinc-100 grid grid-cols-5 gap-4 shadow-2xl">
+        <NavIcon icon={<Home/>} active={activeView === 'home'} onClick={()=>setActiveView('home')} />
+        <NavIcon icon={<Wallet/>} active={activeView === 'inv'} onClick={()=>setActiveView('inv')} />
+        <NavIcon icon={<Fuel/>} active={activeView === 'fuel'} onClick={()=>setActiveView('fuel')} />
+        <NavIcon icon={<BarChart3/>} active={activeView === 'rep'} onClick={()=>setActiveView('rep')} />
+        <NavIcon icon={<Settings/>} active={activeView === 'settings'} onClick={()=>setActiveView('settings')} />
       </nav>
 
       {/* Modals */}
       {modalType === 'price' && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[200] flex items-end animate-in fade-in duration-300">
-            <div className="w-full bg-white dark:bg-zinc-900 rounded-t-[4rem] p-10 pb-16 animate-in slide-in-from-bottom duration-500 shadow-2xl">
-                <div className="w-16 h-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-full mx-auto mb-10" />
-                <h3 className="text-xl font-black text-stc-purple dark:text-purple-400 mb-8 text-right">مدة التوصيل؟ ⏱️</h3>
-                <div className="space-y-4">
-                    {(tempSim === 'jawwy' ? [30, 25, 20] : [28, 24, 20]).map((price, i) => (
-                        <button key={price} onClick={() => confirmSale(price, 1)} className="w-full bg-zinc-50 dark:bg-zinc-800 p-7 rounded-[2.5rem] flex justify-between items-center tap-bounce border-2 border-transparent hover:border-stc-purple/20 transition-all">
-                            <span className="text-lg font-black text-zinc-800 dark:text-zinc-200">{['أقل من ساعتين', '2-3 ساعات', 'أكثر من 3 ساعات'][i]}</span>
-                            <span className="bg-stc-purple text-white px-5 py-2 rounded-2xl font-black">{price} ﷼</span>
-                        </button>
-                    ))}
-                </div>
-                <button onClick={()=>setModalType(null)} className="w-full mt-6 text-zinc-400 font-black text-xs uppercase tracking-widest py-4">إلغاء</button>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[200] flex items-end animate-in fade-in slide-in-from-bottom duration-300">
+          <div className="w-full bg-white rounded-t-[3.5rem] p-10 pb-16">
+            <div className="w-12 h-1 bg-zinc-100 rounded-full mx-auto mb-8" />
+            <h3 className="text-xl font-black mb-8 text-right text-stc-purple">مدة التوصيل؟ ⏱️</h3>
+            <div className="space-y-4">
+              {(tempSim === 'jawwy' ? [30, 25, 20] : [28, 24, 20]).map((p, i) => (
+                <button key={p} onClick={() => handleSale(p, 1)} className="w-full bg-zinc-50 p-6 rounded-2xl flex justify-between items-center hover:bg-stc-purple/5 transition-colors">
+                  <span className="font-black text-zinc-700">{['أقل من ساعتين', '2-3 ساعات', 'أكثر من 3 ساعات'][i]}</span>
+                  <span className="bg-stc-purple text-white px-4 py-2 rounded-xl font-black">{p} ﷼</span>
+                </button>
+              ))}
             </div>
+            <button onClick={()=>setModalType(null)} className="w-full mt-6 text-zinc-400 font-bold py-4">إلغاء</button>
+          </div>
         </div>
       )}
     </div>
   );
 };
 
-// مكونات فرعية
-const QuickAction = ({ label, icon, stock, onClick }: any) => (
-  <button onClick={onClick} className="bg-white dark:bg-zinc-900 p-7 rounded-[2.5rem] text-center border border-zinc-100 dark:border-zinc-800 shadow-sm tap-bounce group transition-all hover:shadow-md relative overflow-hidden">
-    {stock !== undefined && (
-        <span className={`absolute top-4 left-4 text-[9px] font-black px-2 py-0.5 rounded-full ${stock <= 2 ? 'bg-rose-500 text-white animate-pulse' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-400'}`}>{stock}</span>
-    )}
-    <div className="flex justify-center mb-4 group-hover:scale-110 transition-transform duration-300">{icon}</div>
-    <span className="font-black text-xs text-zinc-800 dark:text-zinc-200 block tracking-tight">{label}</span>
+// --- المكونات الفرعية ---
+const StatCard = ({ label, value, icon, color }) => (
+  <div className="bg-white p-5 rounded-3xl shadow-sm border border-zinc-50 flex items-center justify-between">
+    <div className={`p-3 rounded-2xl bg-${color}/10 text-${color}`}>{icon}</div>
+    <div className="text-left">
+      <span className="text-[10px] font-black text-zinc-400 block uppercase mb-1">{label}</span>
+      <span className={`text-xl font-black text-${color} leading-none tracking-tighter`}>{value}</span>
+    </div>
+  </div>
+);
+
+const ActionBtn = ({ label, icon, stock, onClick }) => (
+  <button onClick={onClick} className="bg-white p-6 rounded-[2.5rem] text-center border border-zinc-50 shadow-sm relative group hover:shadow-md transition-all">
+    {stock !== undefined && <span className={`absolute top-4 left-4 text-[8px] font-black px-2 py-0.5 rounded-full ${stock <= 2 ? 'bg-red-500 text-white animate-pulse' : 'bg-zinc-100 text-zinc-400'}`}>{stock}</span>}
+    <div className="flex justify-center mb-3 group-hover:scale-110 transition-transform">{icon}</div>
+    <span className="font-black text-xs text-zinc-800 tracking-tight">{label}</span>
   </button>
 );
 
-const NavItem = ({ icon, active, onClick }: any) => (
-  <button onClick={onClick} className={`flex flex-col items-center justify-center p-4 rounded-[2rem] transition-all ${active ? 'bg-stc-purple text-white shadow-xl shadow-stc-purple/20 animate-in zoom-in' : 'text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}>
-    {icon}
-  </button>
+const NavIcon = ({ icon, active, onClick }) => (
+  <button onClick={onClick} className={`flex justify-center p-4 rounded-2xl transition-all ${active ? 'bg-stc-purple text-white shadow-xl shadow-stc-purple/20' : 'text-zinc-400 hover:text-zinc-600'}`}>{icon}</button>
+);
+
+const SimIcon = ({ type, size }) => {
+  if (type === 'jawwy') return <Cpu size={size} className="text-orange-500" />;
+  if (type === 'sawa') return <Smartphone size={size} className="text-stc-purple" />;
+  if (type === 'multi') return <Layers size={size} className="text-amber-500" />;
+  return <AlertCircle size={size} />;
+};
+
+// --- واجهات إضافية ---
+const InventoryView = ({ db, updateDb }) => (
+  <div className="space-y-6 animate-in fade-in duration-500">
+    <h2 className="text-xl font-black text-stc-purple px-2">إدارة المخزون</h2>
+    <div className="grid grid-cols-2 gap-4">
+      {Object.entries(db.stock).map(([k, v]) => (
+        <div key={k} className="bg-white p-6 rounded-3xl text-center shadow-sm">
+          {/* Fix: Wrapped unknown value v in String() to ensure it's a valid ReactNode */}
+          <span className="block text-3xl font-black text-stc-purple mb-1">{String(v)}</span>
+          <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">{LABELS[k]}</span>
+        </div>
+      ))}
+    </div>
+    <div className="bg-red-50 p-6 rounded-[2rem] border border-red-100">
+      <h3 className="text-red-600 font-black text-xs mb-4 flex items-center gap-2"><HeartOff size={14}/> سلة التوالف</h3>
+      <div className="flex justify-around text-center">
+        {Object.entries(db.damaged).map(([k, v]) => (
+          <div key={k}>
+            {/* Fix: Wrapped unknown value v in String() to ensure it's a valid ReactNode */}
+            <span className="block font-black text-red-600">{String(v)}</span>
+            <span className="text-[9px] font-bold text-red-300 uppercase">{LABELS[k]}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+    <div className="space-y-3">
+        <button onClick={() => {
+            const qty = prompt('الكمية المستلمة؟');
+            if(qty) updateDb(d => ({ ...d, stock: { ...d.stock, jawwy: d.stock.jawwy + parseInt(qty) } }));
+        }} className="w-full bg-emerald-50 text-emerald-600 p-6 rounded-2xl font-black flex justify-between items-center shadow-sm">
+            <span>استلام مخزون جديد (جوّي مثال)</span>
+            <Plus size={20}/>
+        </button>
+    </div>
+  </div>
+);
+
+const FuelView = ({ db, updateDb }) => (
+    <div className="space-y-6 animate-in fade-in duration-500">
+        <div className="bg-white p-8 rounded-[2.5rem] shadow-sm">
+            <h3 className="text-stc-purple font-black mb-6 flex items-center gap-2"><Fuel size={20}/> تسجيل تعبئة وقود</h3>
+            <div className="space-y-4">
+                <input type="number" placeholder="المبلغ بالريال" className="w-full bg-zinc-50 p-5 rounded-2xl font-bold outline-none" id="f-amt" />
+                <button onClick={() => {
+                    {/* Fix: Cast HTMLElement to HTMLInputElement to access .value property */}
+                    const amtInput = document.getElementById('f-amt') as HTMLInputElement;
+                    const amt = amtInput?.value;
+                    if(!amt) return;
+                    updateDb(d => ({
+                        ...d,
+                        fuelLog: [{ id: Date.now(), date: new Date().toISOString(), amount: parseFloat(amt), type: '91' }, ...d.fuelLog]
+                    }));
+                    if (amtInput) amtInput.value = '';
+                }} className="w-full bg-stc-purple text-white py-5 rounded-2xl font-black">حفظ السجل</button>
+            </div>
+        </div>
+        <div className="space-y-3">
+            {db.fuelLog.map(f => (
+                <div key={f.id} className="bg-white p-5 rounded-3xl flex justify-between items-center shadow-sm">
+                    <div className="flex items-center gap-4">
+                        <div className="bg-zinc-50 p-3 rounded-2xl"><Fuel size={18} className="text-stc-purple"/></div>
+                        <div>
+                            <span className="block font-black text-sm">{f.amount} ﷼</span>
+                            <span className="text-[10px] text-zinc-400">{new Date(f.date).toLocaleDateString('ar-SA')}</span>
+                        </div>
+                    </div>
+                </div>
+            ))}
+        </div>
+    </div>
 );
 
 export default App;
