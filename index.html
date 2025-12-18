@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#4F008C">
-    <title>مستر مندوب Pro</title>
+    <title>مستر مندوب Pro - النسخة الاحترافية</title>
     
     <link rel="manifest" href="./manifest.json">
     <link rel="apple-touch-icon" href="https://www.stc.com.sa/content/dam/stc/footer-icons/stc-badge-purple.svg">
@@ -29,76 +29,115 @@
             },
             fontFamily: {
               tajawal: ['Tajawal', 'sans-serif'],
-            },
-            borderRadius: {
-              '3xl': '1.5rem',
-              '4xl': '2rem',
-              '5xl': '2.5rem',
-              '6xl': '3rem',
             }
           }
         }
       }
     </script>
     <style>
-      :root {
-        --font-tajawal: 'Tajawal', sans-serif;
-      }
-      * {
-        font-family: var(--font-tajawal) !important;
-        -webkit-font-smoothing: antialiased;
-        -moz-osx-font-smoothing: grayscale;
-        text-rendering: optimizeLegibility;
-      }
+      :root { --font-tajawal: 'Tajawal', sans-serif; }
+      * { font-family: var(--font-tajawal) !important; -webkit-font-smoothing: antialiased; }
       body { 
         background-color: #F8F9FE;
-        -webkit-tap-highlight-color: transparent; 
         overscroll-behavior-y: contain;
         overflow-x: hidden;
+        user-select: none;
       }
-      span, div, p, h1, h2, h3, h4, input, select, button {
-        padding-top: 0.1em;
-        padding-bottom: 0.1em;
-        word-wrap: break-word;
+      .dark body { background-color: #09090b; }
+      
+      /* تحسين مظهر السكرول بار */
+      ::-webkit-scrollbar { width: 0px; background: transparent; }
+      
+      .tap-bounce:active { transform: scale(0.95); transition: transform 0.1s; }
+      
+      /* رسالة التحميل */
+      #fallback-loader {
+        position: fixed; inset: 0; background: white; z-index: 9999;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        transition: opacity 0.5s;
       }
-      .glass { background: rgba(255, 255, 255, 0.15); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.1); }
-      .dark .glass { background: rgba(0, 0, 0, 0.2); }
-      input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-      .tap-bounce:active { transform: scale(0.96); transition: transform 0.1s; }
-      .no-scrollbar::-webkit-scrollbar { display: none; }
-      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-
-      @media print {
-        .no-print { display: none !important; }
-        header, nav { display: none !important; }
+      .dark #fallback-loader { background: #09090b; color: white; }
+      .spinner { width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid #4F008C; border-radius: 50%; animation: spin 1s linear infinite; }
+      @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+      
+      #error-display {
+        display: none; position: fixed; bottom: 20px; left: 20px; right: 20px;
+        background: #fee2e2; color: #b91c1c; padding: 15px; border-radius: 12px;
+        font-size: 12px; border: 1px solid #fecaca; z-index: 10000;
       }
     </style>
     <script type="importmap">
     {
       "imports": {
-        "react": "https://esm.sh/react@^19.2.3",
-        "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
-        "recharts": "https://esm.sh/recharts@^3.6.0",
-        "react/": "https://esm.sh/react@^19.2.3/",
-        "lucide-react": "https://esm.sh/lucide-react@^0.460.0"
+        "react": "https://esm.sh/react@19.0.0",
+        "react-dom": "https://esm.sh/react-dom@19.0.0",
+        "react-dom/client": "https://esm.sh/react-dom@19.0.0/client",
+        "recharts": "https://esm.sh/recharts@3.6.0",
+        "lucide-react": "https://esm.sh/lucide-react@0.460.0",
+        "react/": "https://esm.sh/react@19.0.0/",
+        "react-dom/": "https://esm.sh/react-dom@19.0.0/"
       }
     }
     </script>
+<link rel="stylesheet" href="/index.css">
 </head>
 <body class="bg-[#F8F9FE] dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 transition-colors duration-300">
+    <!-- واجهة التحميل الاحتياطية -->
+    <div id="fallback-loader">
+        <div class="spinner"></div>
+        <p class="mt-4 font-bold text-stc-purple">جاري تشغيل النظام...</p>
+    </div>
+
+    <!-- عرض الأخطاء في حال الفشل -->
+    <div id="error-display" id="err-box">
+        <b>خطأ في النظام:</b> <span id="err-msg"></span>
+        <br><small>تأكد من تحديث الصفحة أو مراجعة سجلات المتصفح (Console).</small>
+    </div>
+
     <div id="root"></div>
     
-    <!-- هذا السطر هو المحرك الرئيسي الذي كان مفقوداً -->
+    <script type="module">
+        // رصد أخطاء التحميل
+        window.onerror = function(msg, url, line) {
+            const loader = document.getElementById('fallback-loader');
+            if (loader) loader.style.display = 'none';
+            const errBox = document.getElementById('error-display');
+            if (errBox) errBox.style.display = 'block';
+            const errMsg = document.getElementById('err-msg');
+            if (errMsg) errMsg.textContent = msg;
+            return false;
+        };
+
+        // إخفاء الـ loader عند بدء التطبيق
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                const loader = document.getElementById('fallback-loader');
+                if (loader) {
+                    loader.style.opacity = '0';
+                    setTimeout(() => loader.style.display = 'none', 500);
+                }
+            }, 1000);
+        });
+    </script>
+
     <script type="module" src="./index.tsx"></script>
 
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('./sw.js')
-            .then(reg => console.log('Service Worker Registered'))
-            .catch(err => console.log('Service Worker Registration Failed', err));
+          // Calculate the correct path for GitHub Pages subfolders
+          const base = window.location.pathname.endsWith('/') 
+            ? window.location.pathname 
+            : window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
+          
+          const swUrl = base + 'sw.js';
+          
+          navigator.serviceWorker.register(swUrl, { scope: base })
+            .then(reg => console.log('SW Registered at scope:', reg.scope))
+            .catch(err => console.warn('SW Registration failed (this won\'t break the app):', err));
         });
       }
     </script>
+<script type="module" src="/index.tsx"></script>
 </body>
 </html>

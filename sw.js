@@ -1,24 +1,39 @@
 
-const CACHE_NAME = 'mister-delegate-v2';
+const CACHE_NAME = 'mister-delegate-v2.1';
 const assets = [
   './',
   './index.html',
-  './manifest.json',
-  'https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap'
+  './manifest.json'
 ];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(assets);
+      // Use addAll safely, catch individual errors to prevent install failure
+      return Promise.allSettled(
+        assets.map(url => cache.add(url))
+      ).then(() => self.skipWaiting());
     })
   );
 });
 
-self.addEventListener('fetch', (event) => {
-  event.respondWith(
-    caches.match(event.request).then((response) => {
-      return response || fetch(event.request);
-    })
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys().then((keys) => {
+      return Promise.all(
+        keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))
+      );
+    }).then(() => self.clients.claim())
   );
+});
+
+self.addEventListener('fetch', (event) => {
+  // Only handle local requests
+  if (event.request.url.startsWith(self.location.origin)) {
+    event.respondWith(
+      caches.match(event.request).then((response) => {
+        return response || fetch(event.request);
+      }).catch(() => fetch(event.request))
+    );
+  }
 });
