@@ -45,8 +45,8 @@
       #fallback-loader {
         position: fixed; inset: 0; background: white; z-index: 9999;
         display: flex; flex-direction: column; align-items: center; justify-content: center;
+        transition: opacity 0.5s;
       }
-      .dark #fallback-loader { background: #09090b; color: white; }
       .spinner { width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid #4F008C; border-radius: 50%; animation: spin 1s linear infinite; }
       @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
       
@@ -63,8 +63,8 @@
     "react": "https://esm.sh/react@18.2.0",
     "react-dom": "https://esm.sh/react-dom@18.2.0",
     "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
-    "lucide-react": "https://esm.sh/lucide-react@0.284.0",
-    "recharts": "https://esm.sh/recharts@2.10.3",
+    "lucide-react": "https://esm.sh/lucide-react@0.284.0?external=react",
+    "recharts": "https://esm.sh/recharts@2.10.3?external=react",
     "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
     "react/": "https://esm.sh/react@^19.2.3/"
   }
@@ -79,24 +79,30 @@
 
     <div id="error-display">
         <div class="error-card">
-            <h2 class="font-bold text-xl mb-2">حدث خطأ أثناء التشغيل</h2>
-            <p id="err-msg" class="text-sm mb-4">فشل تحميل المكونات الأساسية</p>
-            <button onclick="location.reload()" class="bg-red-600 text-white px-6 py-2 rounded-full font-bold">إعادة المحاولة</button>
+            <h2 class="font-bold text-xl mb-2">حدث خطأ في النظام</h2>
+            <p id="err-msg" class="text-sm mb-4">يتم الآن تحديث المكونات...</p>
+            <button onclick="location.reload()" class="bg-stc-purple text-white px-6 py-2 rounded-full font-bold">إعادة المحاولة</button>
         </div>
     </div>
 
     <div id="root"></div>
     
-    <!-- استخدام Babel لتحويل TSX في المتصفح إذا لم يكن هناك بيئة بناء -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script type="text/babel" data-type="module" src="./index.tsx"></script>
+    <script type="text/babel" data-type="module">
+        import './index.tsx';
+    </script>
 
     <script>
       window.onerror = function(msg) {
+        console.error(msg);
         if (msg.includes('Script error')) return;
-        document.getElementById('fallback-loader').style.display = 'none';
-        document.getElementById('error-display').style.display = 'flex';
-        document.getElementById('err-msg').textContent = msg;
+        const loader = document.getElementById('fallback-loader');
+        if (loader) loader.style.display = 'none';
+        const errDisplay = document.getElementById('error-display');
+        if (errDisplay) {
+            errDisplay.style.display = 'flex';
+            document.getElementById('err-msg').textContent = msg;
+        }
       };
       
       window.addEventListener('load', () => {
@@ -106,7 +112,7 @@
             loader.style.opacity = '0';
             setTimeout(() => loader.style.display = 'none', 500);
           }
-        }, 2000);
+        }, 3000);
       });
     </script>
 </body>
