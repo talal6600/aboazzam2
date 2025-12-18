@@ -1,0 +1,7 @@
+{
+  "name": "Mister Delegate Pro - Premium Edition",
+  "description": "A high-end delivery and inventory management dashboard for STC delegates, featuring cloud sync, fuel tracking, and detailed sales analytics.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
